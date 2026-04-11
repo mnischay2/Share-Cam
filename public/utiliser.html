@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CamShare · Utiliser</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Barlow+Condensed:wght@300;600;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #080c0f;
+    --surface: #0d1318;
+    --border: #1a2530;
+    --border-bright: #233040;
+    --green: #00e5a0;
+    --amber: #ffb020;
+    --amber-dim: rgba(255,176,32,0.12);
+    --red: #ff4545;
+    --text: #c8d8e8;
+    --text-dim: #5a7080;
+    --text-faint: #2a3a48;
+    --mono: 'Space Mono', monospace;
+    --display: 'Barlow Condensed', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    min-height: 100vh;
+  }
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.06) 2px, rgba(0,0,0,0.06) 4px);
+    pointer-events: none; z-index: 100;
+  }
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    grid-template-rows: auto 1fr;
+    min-height: 100vh;
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 32px;
+    gap: 24px;
+  }
+  @media (max-width: 960px) { .layout { grid-template-columns: 1fr; } }
+
+  /* ─── Topbar ──────────────────────────────────────────────── */
+  .topbar {
+    grid-column: 1 / -1;
+    display: flex; align-items: center; gap: 20px;
+    padding-bottom: 24px;
+    border-bottom: 1px solid var(--border);
+  }
+  .back-btn {
+    font-size: 0.65rem; letter-spacing: 0.15em;
+    color: var(--text-dim); text-decoration: none;
+    border: 1px solid var(--border-bright); padding: 6px 12px;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .back-btn:hover { border-color: var(--amber); color: var(--amber); }
+  .logo { font-family: var(--display); font-weight: 800; font-size: 1.4rem; letter-spacing: 0.06em; color: #fff; }
+  .logo span { color: var(--amber); }
+  .mode-badge {
+    font-size: 0.6rem; letter-spacing: 0.2em;
+    padding: 4px 10px; border: 1px solid var(--amber); color: var(--amber); text-transform: uppercase;
+  }
+  .spacer { flex: 1; }
+
+  /* ─── Main ────────────────────────────────────────────────── */
+  .main-panel { display: flex; flex-direction: column; gap: 16px; }
+
+  .video-container {
+    position: relative; background: #000;
+    border: 1px solid var(--border); aspect-ratio: 16/9; overflow: hidden;
+  }
+  #remote-video { width: 100%; height: 100%; object-fit: cover; display: block; }
+  #draw-canvas { display: none; }
+
+  .video-overlay {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 12px;
+    background: rgba(8,12,15,0.95); transition: opacity 0.3s;
+  }
+  .video-overlay.hidden { opacity: 0; pointer-events: none; }
+  .overlay-icon { font-size: 3rem; }
+  .overlay-text { font-size: 0.75rem; letter-spacing: 0.1em; color: var(--text-dim); text-align: center; }
+
+  .vcam-badge {
+    position: absolute; top: 16px; left: 16px;
+    display: flex; align-items: center; gap: 8px;
+    background: rgba(0,0,0,0.7); padding: 6px 12px;
+    font-size: 0.6rem; letter-spacing: 0.2em; color: var(--amber);
+    border: 1px solid rgba(255,176,32,0.3); opacity: 0; transition: opacity 0.3s;
+  }
+  .vcam-badge.active { opacity: 1; }
+  .vcam-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--amber); animation: blink 1.5s ease-in-out infinite;
+  }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+
+  .stats-bar {
+    display: flex; gap: 1px; background: var(--border); border: 1px solid var(--border);
+  }
+  .stat {
+    background: var(--surface); flex: 1; padding: 12px 16px;
+    display: flex; flex-direction: column; gap: 3px;
+  }
+  .stat-label { font-size: 0.55rem; letter-spacing: 0.2em; color: var(--text-faint); text-transform: uppercase; }
+  .stat-val { font-size: 0.78rem; color: var(--amber); font-weight: 700; }
+
+  /* ─── Sidebar ─────────────────────────────────────────────── */
+  .sidebar { display: flex; flex-direction: column; gap: 16px; }
+  .panel { border: 1px solid var(--border); background: var(--surface); }
+  .panel-header {
+    padding: 12px 16px; border-bottom: 1px solid var(--border);
+    font-size: 0.6rem; letter-spacing: 0.2em; color: var(--text-dim); text-transform: uppercase;
+  }
+  .panel-body { padding: 16px; }
+
+  .field { margin-bottom: 16px; }
+  .field label { display: block; font-size: 0.6rem; letter-spacing: 0.2em; color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; }
+  .field input {
+    width: 100%; background: var(--bg); border: 1px solid var(--border-bright);
+    color: var(--text); font-family: var(--mono); font-size: 0.78rem; padding: 10px 12px;
+    outline: none; transition: border-color 0.15s;
+  }
+  .field input:focus { border-color: var(--amber); }
+
+  .btn {
+    width: 100%; padding: 13px; font-family: var(--display); font-weight: 800;
+    font-size: 1rem; letter-spacing: 0.15em; text-transform: uppercase;
+    cursor: pointer; border: none; transition: opacity 0.15s, transform 0.1s; margin-bottom: 8px;
+  }
+  .btn:last-child { margin-bottom: 0; }
+  .btn:active { transform: scale(0.98); }
+  .btn-primary { background: var(--amber); color: #000; }
+  .btn-success { background: var(--green); color: #000; }
+  .btn-danger { background: var(--red); color: #fff; }
+  .btn-outline { background: transparent; border: 1px solid var(--border-bright); color: var(--text-dim); }
+  .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+  /* Room list */
+  #room-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+  .room-item {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 12px; border: 1px solid var(--border-bright);
+    cursor: pointer; transition: border-color 0.15s; font-size: 0.7rem;
+  }
+  .room-item:hover { border-color: var(--amber); }
+  .room-item.selected { border-color: var(--amber); background: var(--amber-dim); }
+  .room-name { color: var(--text); }
+  .room-viewers { font-size: 0.6rem; color: var(--text-dim); }
+  .no-rooms { font-size: 0.68rem; color: var(--text-faint); letter-spacing: 0.08em; padding: 8px 0; }
+
+  /* Virtual cam steps */
+  .steps { list-style: none; counter-reset: step; }
+  .steps li {
+    counter-increment: step;
+    padding: 10px 12px 10px 36px;
+    font-size: 0.65rem; line-height: 1.7; color: var(--text-dim);
+    border-left: 1px solid var(--border); margin-bottom: 8px;
+    position: relative; letter-spacing: 0.03em;
+  }
+  .steps li::before {
+    content: counter(step);
+    position: absolute; left: 10px; top: 10px;
+    font-size: 0.55rem; color: var(--amber); font-weight: 700;
+  }
+  .steps code {
+    display: block; margin-top: 4px; background: var(--bg); padding: 6px 8px;
+    font-family: var(--mono); font-size: 0.62rem; color: var(--green);
+    border-left: 2px solid var(--green); letter-spacing: 0.02em;
+  }
+  .steps a { color: var(--amber); text-decoration: underline; }
+
+  /* Log */
+  #log { list-style: none; max-height: 150px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+  #log li {
+    font-size: 0.62rem; line-height: 1.5; color: var(--text-dim);
+    padding: 4px 0; border-bottom: 1px solid var(--text-faint); letter-spacing: 0.04em;
+  }
+  #log li.ok { color: var(--green); }
+  #log li.warn { color: var(--amber); }
+  #log li.err { color: var(--red); }
+
+  /* vcam status */
+  .vcam-status-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 0; border-bottom: 1px solid var(--border); margin-bottom: 12px;
+  }
+  .vcam-status-label { font-size: 0.62rem; letter-spacing: 0.1em; color: var(--text-dim); }
+  .vcam-status-val { font-size: 0.72rem; font-weight: 700; }
+  .vcam-status-val.on { color: var(--green); }
+  .vcam-status-val.off { color: var(--text-faint); }
+
+  .device-path { font-size: 0.68rem; color: var(--amber); background: var(--bg); padding: 6px 10px; border: 1px solid var(--border); letter-spacing: 0.06em; margin-bottom: 12px; }
+
+  /* Tabs */
+  .tabs { display: flex; border-bottom: 1px solid var(--border); margin-bottom: 0; }
+  .tab-btn {
+    padding: 10px 16px; font-family: var(--mono); font-size: 0.6rem; letter-spacing: 0.15em;
+    cursor: pointer; background: none; border: none; color: var(--text-dim); text-transform: uppercase;
+    border-bottom: 2px solid transparent; transition: color 0.15s, border-color 0.15s;
+  }
+  .tab-btn.active { color: var(--amber); border-bottom-color: var(--amber); }
+  .tab-content { display: none; padding: 16px; }
+  .tab-content.active { display: block; }
+</style>
+</head>
+<body>
+<div class="layout">
+  <!-- Topbar -->
+  <div class="topbar">
+    <a href="/" class="back-btn">← BACK</a>
+    <div class="logo">CAM<span>SHARE</span></div>
+    <div class="mode-badge">UTILISER MODE</div>
+    <div class="spacer"></div>
+    <div id="conn-status" style="font-size:0.65rem;letter-spacing:0.1em;color:var(--text-dim)">CONNECTING...</div>
+  </div>
+
+  <!-- Main video -->
+  <div class="main-panel">
+    <div class="video-container">
+      <video id="remote-video" autoplay playsinline></video>
+      <canvas id="draw-canvas"></canvas>
+      <div class="video-overlay" id="video-overlay">
+        <div class="overlay-icon">📡</div>
+        <div class="overlay-text">JOIN A ROOM TO RECEIVE CAMERA FEED</div>
+      </div>
+      <div class="vcam-badge" id="vcam-badge">
+        <div class="vcam-dot"></div>
+        VIRTUAL CAM ACTIVE
+      </div>
+    </div>
+
+    <div class="stats-bar">
+      <div class="stat">
+        <div class="stat-label">Resolution</div>
+        <div class="stat-val" id="stat-res">—</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">FPS</div>
+        <div class="stat-val" id="stat-fps">—</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Room</div>
+        <div class="stat-val" id="stat-room">—</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Virtual Cam</div>
+        <div class="stat-val" id="stat-vcam" style="color:var(--text-faint)">OFF</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <!-- Connect to room -->
+    <div class="panel" id="connect-panel">
+      <div class="panel-header">◎ Connect to Room</div>
+      <div class="panel-body">
+        <div class="field">
+          <label>Room ID</label>
+          <input id="room-input" type="text" placeholder="Enter room ID...">
+        </div>
+        <div id="room-list"></div>
+        <button class="btn btn-primary" id="connect-btn">CONNECT</button>
+      </div>
+    </div>
+
+    <!-- Virtual Camera -->
+    <div class="panel">
+      <div class="tabs">
+        <button class="tab-btn active" data-tab="vcam">Virtual Cam</button>
+        <button class="tab-btn" data-tab="setup">Setup Guide</button>
+      </div>
+
+      <div class="tab-content active" id="tab-vcam">
+        <div class="vcam-status-row">
+          <span class="vcam-status-label">STATUS</span>
+          <span class="vcam-status-val off" id="vcam-status-val">INACTIVE</span>
+        </div>
+        <div class="device-path" id="vcam-device-path">/dev/video42</div>
+        <button class="btn btn-success" id="vcam-start-btn">START VIRTUAL CAMERA</button>
+        <button class="btn btn-danger" id="vcam-stop-btn" disabled>STOP VIRTUAL CAMERA</button>
+        <div style="margin-top:16px; padding:12px; border:1px solid var(--amber); background:rgba(255,176,32,0.05);">
+          <strong style="color:var(--amber);font-size:0.65rem;letter-spacing:0.1em;display:block;margin-bottom:6px;">⚠️ IMPORTANT ORDER</strong>
+          <p style="font-size:0.6rem;color:var(--text-dim);line-height:1.6;">
+            You <strong>must</strong> click "Start Virtual Camera" <em>before</em> opening apps like Chrome or OBS. If you open the app first, the camera will be hidden.
+          </p>
+        </div>
+      </div>
+
+      <div class="tab-content" id="tab-setup">
+        <p style="font-size:0.62rem;color:var(--text-dim);margin-bottom:12px;letter-spacing:0.04em;line-height:1.7;">One-time setup required on the utiliser machine:</p>
+        <ul class="steps">
+          <li>
+            Install v4l2loopback & FFmpeg (Linux only)
+            <code>sudo apt install v4l2loopback-dkms ffmpeg</code>
+          </li>
+          <li>
+            Or, automatically install dependencies:
+            <code>./setup.sh</code>
+          </li>
+          <li>
+            Run the server, then click "Start Virtual Camera" above. Apps will instantly detect <strong>CamShare</strong>.
+          </li>
+        </ul>
+        <p style="font-size:0.6rem;color:var(--text-faint);margin-top:12px;line-height:1.7;">
+          <strong style="color:var(--amber)">Windows:</strong> Use <a href="https://obsproject.com/wiki/Virtual-Camera-RTSP-Usage" target="_blank">OBS Virtual Camera</a> or <a href="https://github.com/rdp/screen-capture-recorder-to-video-windows-free" target="_blank">UnityCapture</a> to consume the feed.
+        </p>
+      </div>
+    </div>
+
+    <!-- Disconnect -->
+    <div class="panel" id="disconnect-panel" style="display:none">
+      <div class="panel-body">
+        <button class="btn btn-danger" id="disconnect-btn">DISCONNECT</button>
+      </div>
+    </div>
+
+    <!-- Log -->
+    <div class="panel">
+      <div class="panel-header">◈ Event Log</div>
+      <div class="panel-body" style="padding:8px">
+        <ul id="log"></ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+const socket = io();
+let pc = null;
+let roomId = null;
+let vcamActive = false;
+let frameCanvas, frameCtx;
+let frameLoopId = null;
+let lastFrameTime = 0;
+let frameCount = 0;
+let displayedFps = 0;
+
+// Pre-fill from URL
+const urlParams = new URLSearchParams(location.search);
+if (urlParams.get('room')) {
+  document.getElementById('room-input').value = urlParams.get('room');
+}
+
+// ── UI refs ──────────────────────────────────────────────────────────────────
+const remoteVideo   = document.getElementById('remote-video');
+const overlay       = document.getElementById('video-overlay');
+const vcamBadge     = document.getElementById('vcam-badge');
+const connectBtn    = document.getElementById('connect-btn');
+const disconnectBtn = document.getElementById('disconnect-btn');
+const roomInput     = document.getElementById('room-input');
+const connectPanel  = document.getElementById('connect-panel');
+const disconnectPanel = document.getElementById('disconnect-panel');
+const vcamStartBtn  = document.getElementById('vcam-start-btn');
+const vcamStopBtn   = document.getElementById('vcam-stop-btn');
+const vcamStatusVal = document.getElementById('vcam-status-val');
+const vcamDevicePath= document.getElementById('vcam-device-path');
+const logEl         = document.getElementById('log');
+
+function log(msg, type = '') {
+  const li = document.createElement('li');
+  li.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  li.className = type;
+  logEl.prepend(li);
+  if (logEl.children.length > 50) logEl.lastChild.remove();
+}
+
+// ── Tabs ─────────────────────────────────────────────────────────────────────
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
+  });
+});
+
+// ── Socket events ─────────────────────────────────────────────────────────────
+socket.on('connect', () => {
+  document.getElementById('conn-status').textContent = 'ONLINE';
+  document.getElementById('conn-status').style.color = 'var(--green)';
+  socket.emit('rooms:list');
+  socket.emit('vcam:status:get');
+  log('Connected to server', 'ok');
+});
+
+socket.on('disconnect', () => {
+  document.getElementById('conn-status').textContent = 'OFFLINE';
+  document.getElementById('conn-status').style.color = 'var(--red)';
+});
+
+socket.on('rooms:update', (rooms) => {
+  const listEl = document.getElementById('room-list');
+  if (rooms.length === 0) {
+    listEl.innerHTML = '<div class="no-rooms">No active rooms found</div>';
+    return;
+  }
+  listEl.innerHTML = rooms.map(r => `
+    <div class="room-item" data-room="${r.id}">
+      <span class="room-name">${r.id}</span>
+      <span class="room-viewers">${r.utilisers} viewer${r.utilisers!==1?'s':''}</span>
+    </div>
+  `).join('');
+  listEl.querySelectorAll('.room-item').forEach(item => {
+    item.addEventListener('click', () => {
+      listEl.querySelectorAll('.room-item').forEach(i => i.classList.remove('selected'));
+      item.classList.add('selected');
+      roomInput.value = item.dataset.room;
+    });
+  });
+  // Auto-select if URL param matches
+  if (urlParams.get('room')) {
+    listEl.querySelectorAll('.room-item').forEach(i => {
+      if (i.dataset.room === urlParams.get('room')) i.classList.add('selected');
+    });
+  }
+});
+
+socket.on('utiliser:waiting', ({ hostId }) => {
+  log(`Waiting for host ${hostId.slice(0,8)} to connect...`);
+});
+
+socket.on('rtc:offer', async ({ from, offer }) => {
+  log(`Received WebRTC offer from host`);
+  pc = createPeer(from);
+  await pc.setRemoteDescription(offer);
+  const answer = await pc.createAnswer();
+  await pc.setLocalDescription(answer);
+  socket.emit('rtc:answer', { to: from, answer });
+});
+
+socket.on('rtc:ice', async ({ from, candidate }) => {
+  try { await pc?.addIceCandidate(candidate); } catch {}
+});
+
+socket.on('host:left', () => {
+  log('Host disconnected', 'warn');
+  cleanup();
+});
+
+socket.on('error', ({ message }) => log(message, 'err'));
+
+socket.on('vcam:status', ({ active, device }) => {
+  vcamActive = active;
+  updateVcamUI(active, device);
+  if (active) startFrameLoop();
+  else stopFrameLoop();
+});
+
+// ── Connect ───────────────────────────────────────────────────────────────────
+connectBtn.addEventListener('click', () => {
+  const id = roomInput.value.trim();
+  if (!id) { log('Enter a room ID', 'warn'); return; }
+  roomId = id;
+  socket.emit('utiliser:join', { roomId: id });
+  document.getElementById('stat-room').textContent = id;
+  log(`Joining room "${id}"...`);
+  connectPanel.style.display = 'none';
+  disconnectPanel.style.display = 'block';
+});
+
+disconnectBtn.addEventListener('click', () => {
+  cleanup();
+  location.reload();
+});
+
+// ── Virtual camera ─────────────────────────────────────────────────────────────
+vcamStartBtn.addEventListener('click', () => {
+  if (!remoteVideo.srcObject) {
+    log('No camera stream yet. Connect to a room first.', 'warn');
+    return;
+  }
+
+  let w = remoteVideo.videoWidth || 1280;
+  let h = remoteVideo.videoHeight || 720;
+  if (w > 1280) { h = Math.round(h * (1280 / w)); w = 1280; }
+  if (h > 720) { w = Math.round(w * (720 / h)); h = 720; }
+  // FFmpeg pixel formats require even dimensions
+  w = w - (w % 2); h = h - (h % 2);
+
+  socket.emit('vcam:start', { width: w, height: h });
+  log(`Starting virtual camera at ${w}x${h}...`);
+});
+
+vcamStopBtn.addEventListener('click', () => {
+  socket.emit('vcam:stop');
+  stopFrameLoop();
+  log('Stopping virtual camera...');
+});
+
+function updateVcamUI(active, device) {
+  vcamStatusVal.textContent = active ? 'ACTIVE' : 'INACTIVE';
+  vcamStatusVal.className = `vcam-status-val ${active ? 'on' : 'off'}`;
+  if (device) vcamDevicePath.textContent = device;
+  vcamStartBtn.disabled = active;
+  vcamStopBtn.disabled = !active;
+  vcamBadge.classList.toggle('active', active);
+  const vcamStat = document.getElementById('stat-vcam');
+  vcamStat.textContent = active ? 'ON' : 'OFF';
+  vcamStat.style.color = active ? 'var(--green)' : 'var(--text-faint)';
+}
+
+// Frame capture loop: draws video to canvas, converts to raw BGR24, sends to server
+function startFrameLoop() {
+  if (frameLoopId) return;
+  const video = remoteVideo;
+  if (!video.videoWidth) {
+    video.addEventListener('loadedmetadata', () => startFrameLoop(), { once: true });
+    return;
+  }
+
+  frameCanvas = document.getElementById('draw-canvas');
+
+  // Lock canvas size so byte array matches ffmpeg, max 720p
+  let w = video.videoWidth || 1280;
+  let h = video.videoHeight || 720;
+  if (w > 1280) { h = Math.round(h * (1280 / w)); w = 1280; }
+  if (h > 720) { w = Math.round(w * (720 / h)); h = 720; }
+  w = w - (w % 2); h = h - (h % 2);
+
+  frameCanvas.width = w;
+  frameCanvas.height = h;
+  frameCtx = frameCanvas.getContext('2d', { willReadFrequently: true });
+
+  let lastSend = 0;
+  const TARGET_FPS = 90;
+  const INTERVAL = 1000 / TARGET_FPS;
+
+  function loop() {
+    if (!vcamActive) return;
+
+    const ts = performance.now();
+    if (ts - lastSend < INTERVAL) return;
+    lastSend = ts;
+
+    if (video.readyState < 2) return;
+
+    // Draw frame (stretches automatically if WebRTC resolution changes mid-stream)
+    frameCtx.drawImage(video, 0, 0, frameCanvas.width, frameCanvas.height);
+    const imgData = frameCtx.getImageData(0, 0, frameCanvas.width, frameCanvas.height);
+
+    // Convert RGBA → BGR24
+    const rgba = imgData.data;
+    const bgr = new Uint8Array((rgba.length / 4) * 3);
+    for (let i = 0, j = 0; i < rgba.length; i += 4, j += 3) {
+      bgr[j]   = rgba[i + 2]; // B
+      bgr[j+1] = rgba[i + 1]; // G
+      bgr[j+2] = rgba[i];     // R
+    }
+
+    socket.emit('vcam:frame', bgr.buffer);
+
+    // FPS counter
+    frameCount++;
+    if (ts - lastFrameTime >= 1000) {
+      displayedFps = frameCount;
+      document.getElementById('stat-fps').textContent = `${displayedFps} fps`;
+      frameCount = 0;
+      lastFrameTime = ts;
+    }
+  }
+
+  frameLoopId = setInterval(loop, 1000 / 90);
+  log('Frame loop started → virtual camera', 'ok');
+}
+
+function stopFrameLoop() {
+  if (frameLoopId) { clearInterval(frameLoopId); frameLoopId = null; }
+}
+
+// ── WebRTC ─────────────────────────────────────────────────────────────────────
+function createPeer(hostId) {
+  const p = new RTCPeerConnection({
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+    ],
+  });
+
+  p.onicecandidate = ({ candidate }) => {
+    if (candidate) socket.emit('rtc:ice', { to: hostId, candidate });
+  };
+
+  p.ontrack = ({ streams }) => {
+    log('Video stream received!', 'ok');
+    remoteVideo.srcObject = streams[0];
+    overlay.classList.add('hidden');
+
+    remoteVideo.addEventListener('loadedmetadata', () => {
+      document.getElementById('stat-res').textContent =
+        `${remoteVideo.videoWidth}×${remoteVideo.videoHeight}`;
+    }, { once: true });
+
+    // If vcam was already active, start frame loop
+    if (vcamActive) startFrameLoop();
+  };
+
+  p.onconnectionstatechange = () => {
+    log(`WebRTC: ${p.connectionState}`);
+    if (p.connectionState === 'connected') log('WebRTC connected!', 'ok');
+  };
+
+  return p;
+}
+
+function cleanup() {
+  stopFrameLoop();
+  pc?.close(); pc = null;
+  if (remoteVideo.srcObject) {
+    remoteVideo.srcObject.getTracks().forEach(t => t.stop());
+    remoteVideo.srcObject = null;
+  }
+  overlay.classList.remove('hidden');
+}
+
+window.addEventListener('beforeunload', cleanup);
+</script>
+</body>
+</html>
