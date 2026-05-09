@@ -715,23 +715,21 @@ async function startCapture(deviceId) {
   };
 
   state.stream = await navigator.mediaDevices.getUserMedia(constraints);
-
-  // FIX: Extract the TRUE hardware dimensions the camera decided to use
-  const track = state.stream.getVideoTracks()[0];
-  const settings = track.getSettings();
-
-  // Override our ideal state with the actual hardware reality
-  state.width = settings.width;
-  state.height = settings.height;
-  console.log(`Native Camera Res: ${state.width}x${state.height}`);
-
-  // Send these exact dimensions to the Python server immediately
-  sendConfig();
-
   $preview.srcObject = state.stream;
   $overlay.classList.add('hidden');
 
-  return state.stream;
+  // FIX: Wait for the video element to digest the stream and report TRUE hardware dimensions
+  return new Promise((resolve) => {
+    $preview.onloadedmetadata = () => {
+      state.width = $preview.videoWidth;
+      state.height = $preview.videoHeight;
+      console.log(`Camera initialized at ${state.width}x${state.height}`);
+      
+      // Tell backend the exact starting dimensions
+      sendConfig(); 
+      resolve(state.stream);
+    };
+  });
 }
 
 async function startEncoding(stream) {
@@ -740,8 +738,13 @@ async function startEncoding(stream) {
     state.encoder.close();
   }
 
+  if (state.reader) {
+    await state.reader.cancel().catch(()=>{});
+    state.reader = null;
+  }
+  clearInterval(state._fallbackInterval);
   state.encoder = buildEncoder();
-  state._forceKeyframe = true; // First frame is always a keyframe
+  state._forceKeyframe = true;
 
   const track = stream.getVideoTracks()[0];
 
@@ -942,6 +945,26 @@ async function stop(silent = false) {
   $btnConn.classList.remove('stop');
   $btnConn.disabled = false;
 }
+
+// FIX: Handle physical phone rotation dynamically
+$preview.addEventListener('resize', () => {
+  if (!state.running || !$preview.videoWidth) return;
+
+  // If dimensions physically swapped/changed
+  if (state.width !== $preview.videoWidth || state.height !== $preview.videoHeight) {
+    console.log(`Rotation detected! New dims: ${$preview.videoWidth}x${$preview.videoHeight}`);
+    
+    // Update state to the new aspect ratio
+    state.width = $preview.videoWidth;
+    state.height = $preview.videoHeight;
+    
+    // Send the new aspect ratio to the Python host
+    sendConfig();
+    
+    // Restart the WebCodecs pipeline with the new dimensions
+    startEncoding(state.stream).catch(e => toast('Rotation recovery failed: ' + e.message));
+  }
+});
 
 // ── Auto-fill URL from page origin (when served by ShareCam host) ─────────
 (function prefillUrl() {

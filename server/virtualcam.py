@@ -205,7 +205,26 @@ class VirtualCam:
 
                     h, w = frame.shape[:2]
                     if w != self.width or h != self.height:
-                        frame = cv2.resize(frame, (self.width, self.height), interpolation=cv2.INTER_LINEAR)
+                        # FIX: Proportional aspect ratio padding (Letterbox/Pillarbox)
+                        target_ratio = self.width / self.height
+                        frame_ratio = w / h
+
+                        if frame_ratio > target_ratio:
+                            # Image is wider than target -> Letterbox (pad top/bottom)
+                            new_w = self.width
+                            new_h = int(self.width / frame_ratio)
+                            resized = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+                            pad_top = (self.height - new_h) // 2
+                            pad_bottom = self.height - new_h - pad_top
+                            frame = cv2.copyMakeBorder(resized, pad_top, pad_bottom, 0, 0, cv2.BORDER_CONSTANT, value=[0, 0, 0])
+                        else:
+                            # Image is taller than target -> Pillarbox (pad left/right)
+                            new_h = self.height
+                            new_w = int(self.height * frame_ratio)
+                            resized = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+                            pad_left = (self.width - new_w) // 2
+                            pad_right = self.width - new_w - pad_left
+                            frame = cv2.copyMakeBorder(resized, 0, 0, pad_left, pad_right, cv2.BORDER_CONSTANT, value=[0, 0, 0])
 
                     try:
                         cam.send(frame)
@@ -249,7 +268,26 @@ class VirtualCam:
 
                                         h, w = frame.shape[:2]
                                         if w != self.width or h != self.height:
-                                            frame = cv2.resize(frame, (self.width, self.height), interpolation=cv2.INTER_LINEAR)
+                                            # FIX: Proportional aspect ratio padding (Letterbox/Pillarbox)
+                                            target_ratio = self.width / self.height
+                                            frame_ratio = w / h
+
+                                            if frame_ratio > target_ratio:
+                                                # Image is wider than target -> Letterbox (pad top/bottom)
+                                                new_w = self.width
+                                                new_h = int(self.width / frame_ratio)
+                                                resized = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+                                                pad_top = (self.height - new_h) // 2
+                                                pad_bottom = self.height - new_h - pad_top
+                                                frame = cv2.copyMakeBorder(resized, pad_top, pad_bottom, 0, 0, cv2.BORDER_CONSTANT, value=[0, 0, 0])
+                                            else:
+                                                # Image is taller than target -> Pillarbox (pad left/right)
+                                                new_h = self.height
+                                                new_w = int(self.height * frame_ratio)
+                                                resized = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+                                                pad_left = (self.width - new_w) // 2
+                                                pad_right = self.width - new_w - pad_left
+                                                frame = cv2.copyMakeBorder(resized, 0, 0, pad_left, pad_right, cv2.BORDER_CONSTANT, value=[0, 0, 0])
 
                                         try:
                                             cam.send(frame)
