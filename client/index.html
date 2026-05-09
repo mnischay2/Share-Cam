@@ -497,13 +497,23 @@ function activateChip(group, el) {
   group.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
   el.classList.add('active');
 }
-
+// Validate fps/resolution combination (prevent unsupported combos that crash encoder)
+function validateFpsResolution() {
+  // 60fps is generally unstable at 1080p and above; 4K is unsupported
+  if (state.fps >= 60 && state.width >= 1280) {
+    toast('⚠️ 60fps @ 1080p+ may cause crashes. Defaulting to 30fps.');
+    state.fps = 30;
+    document.querySelector('#fps-chips .chip[data-fps="30"]').classList.add('active');
+    document.querySelector('#fps-chips .chip[data-fps="60"]').classList.remove('active');
+  }
+}
 document.getElementById('res-chips').addEventListener('click', e => {
   const chip = e.target.closest('.chip');
   if (!chip) return;
   activateChip(e.currentTarget, chip);
   state.width  = +chip.dataset.w;
   state.height = +chip.dataset.h;
+  validateFpsResolution();  // Validate after resolution change
   if (state.running) applyStreamConfig();
 });
 
@@ -512,6 +522,7 @@ document.getElementById('fps-chips').addEventListener('click', e => {
   if (!chip) return;
   activateChip(e.currentTarget, chip);
   state.fps = +chip.dataset.fps;
+  validateFpsResolution();  // Validate after fps change
   if (state.running) applyStreamConfig();
 });
 
@@ -721,6 +732,7 @@ async function startEncoding(stream) {
 
   // Use MediaStreamTrackProcessor for zero-copy frame access
   if (window.MediaStreamTrackProcessor) {
+    console.info("Using MediaStreamTrackProcessor (preferred)");
     const processor = new MediaStreamTrackProcessor({ track });
     state.reader = processor.readable.getReader();
 
@@ -746,24 +758,36 @@ async function startEncoding(stream) {
       }
     })();
   } else {
-    // Fallback: ImageCapture-based polling (Safari / older Chrome)
-    toast('MediaStreamTrackProcessor not supported — using fallback');
+    // Fallback: ImageCapture-based polling (Safari / older Chrome / non-secure context)
+    console.warn("MediaStreamTrackProcessor unavailable (browser/context limitation)");
+    console.warn("Browser: " + navigator.userAgent.slice(0, 80));
+    console.warn("Protocol: " + location.protocol);
+    toast('⚠️ Using fallback capture (slower). Ensure page is HTTPS.');
+    
     const imageCapture = new ImageCapture(track);
     let frameCount = 0;
+    const targetInterval = 1000 / state.fps;
 
     state._fallbackInterval = setInterval(async () => {
       if (!state.running) { clearInterval(state._fallbackInterval); return; }
       try {
         const bitmap = await imageCapture.grabFrame();
         const frame = new VideoFrame(bitmap, { timestamp: performance.now() * 1000 });
-        const isKey = state._forceKeyframe || frameCount % (state.fps * 2) === 0;
-        if (isKey) state._forceKeyframe = false;
-        state.encoder.encode(frame, { keyFrame: isKey });
+        
+        if (state.encoder.encodeQueueSize < 2) {  // Lower threshold for fallback
+          const isKey = state._forceKeyframe || frameCount % (state.fps * 2) === 0;
+          if (isKey) state._forceKeyframe = false;
+          state.encoder.encode(frame, { keyFrame: isKey });
+          frameCount++;
+        } else {
+          state.framesDropped++;
+        }
         frame.close();
         bitmap.close();
-        frameCount++;
-      } catch (_) {}
-    }, 1000 / state.fps);
+      } catch (e) {
+        console.error("Fallback frame grab error: " + e.message);
+      }
+    }, targetInterval);
   }
 }
 
