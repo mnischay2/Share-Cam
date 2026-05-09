@@ -671,15 +671,17 @@ function buildEncoder() {
       state.framesSent++;
     },
     error: (e) => {
-      console.error('[Encoder]', e);
-      toast('Encoder error — restarting');
-      if (state.running) restartEncoder();
+      console.error('[Encoder Critical Error]', e);
+      // FIX: Stop the state to prevent "Failed to execute close" crash loops
+      state.running = false; 
+      toast('Encoder error: ' + e.message);
     },
   });
 
   // H.264 Baseline for maximum compatibility
   encoder.configure({
-    codec: 'avc1.42001f',          // Baseline Profile Level 3.1
+    // FIX: Upgraded from 1f (Level 3.1) to 2a (Level 4.2) for 1080p support
+    codec: 'avc1.42002a',          
     width: state.width,
     height: state.height,
     bitrate: bitrateForRes(),
@@ -713,6 +715,19 @@ async function startCapture(deviceId) {
   };
 
   state.stream = await navigator.mediaDevices.getUserMedia(constraints);
+
+  // FIX: Extract the TRUE hardware dimensions the camera decided to use
+  const track = state.stream.getVideoTracks()[0];
+  const settings = track.getSettings();
+
+  // Override our ideal state with the actual hardware reality
+  state.width = settings.width;
+  state.height = settings.height;
+  console.log(`Native Camera Res: ${state.width}x${state.height}`);
+
+  // Send these exact dimensions to the Python server immediately
+  sendConfig();
+
   $preview.srcObject = state.stream;
   $overlay.classList.add('hidden');
 

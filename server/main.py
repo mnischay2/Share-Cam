@@ -131,7 +131,7 @@ async def stream_endpoint(ws: WebSocket):
                                 f"Stream config updated → "
                                 f"{new_w}×{new_h}@{new_fps}fps  rot={new_rot}°"
                             )
-                            vcam.reconfigure(new_w, new_h, new_fps)
+                        #    vcam.reconfigure(new_w, new_h, new_fps)
                             decoder.reset()
 
                     elif msg_type == "ping":

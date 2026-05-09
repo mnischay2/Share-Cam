@@ -54,9 +54,11 @@ def _recover_v4l2loopback(device: str, max_retries: int = 5) -> bool:
                 time.sleep(2)
 
                 # Reload the module
+                # Reload the module
                 logger.debug(f"[Recovery attempt {attempt + 1}/{max_retries}] Reloading v4l2loopback...")
                 result = subprocess.run(
-                    ["sudo", "modprobe", "v4l2loopback", f"devices=1", f"video_nr={dev_nr}", f"card_label=ShareCam"],
+                    # FIX: Added exclusive_caps=1 for Google Meet detection
+                    ["sudo", "modprobe", "v4l2loopback", f"devices=1", f"video_nr={dev_nr}", f"card_label=ShareCam", "exclusive_caps=1"],
                     capture_output=True,
                     timeout=10,
                     text=True,
