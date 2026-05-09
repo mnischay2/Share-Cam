@@ -1,130 +1,133 @@
-# CamShare
+# ShareCam
 
-Share any device's camera over your local network. The receiving device mounts it as a **virtual webcam driver** — usable by OBS, Zoom, Meet, any app.
+Turn your smartphone into a high-fidelity virtual webcam over your local network.
+**No cloud. No drivers to install on the phone. Sub-150ms latency.**
 
 ```
-[Host Device]              [Utiliser Device]
-  webcam                      /dev/video0 (CamShare)
-    │                               ▲
-    │   WebRTC (LAN, <100ms)        │
-    └──────────────────────────────►│
-                              ffmpeg pipe
-                           (v4l2loopback)
+Phone  ──(H.264/WSS)──►  Host PC  ──►  /dev/videoX  ──►  Zoom / Meet / OBS
 ```
+
+---
+
+## Architecture
+
+| Layer | Tech |
+|---|---|
+| Discovery | mDNS (`sharecam.local`) + QR code |
+| Transport | Secure WebSocket (WSS / TLS 1.3) |
+| Codec | H.264 Annex-B via WebCodecs API |
+| Decode | PyAV (FFmpeg bindings) |
+| Output | pyvirtualcam → v4l2loopback (Linux) / OBS VirtualCam (Windows) |
 
 ---
 
 ## Quick Start
 
-### 1. Install dependencies
+### Linux (Ubuntu 22.04 / 24.04)
+
 ```bash
-npm install
+git clone <repo> sharecam && cd sharecam
+
+# One-time setup (installs v4l2loopback, creates venv)
+chmod +x install.sh && ./install.sh
+
+# Run
+source .venv/bin/activate
+python run.py
 ```
 
-### 2. Setup virtual camera (utiliser device only — Linux)
-```bash
-chmod +x setup.sh
-./setup.sh
-```
-This installs `v4l2loopback` + `ffmpeg` and creates `/dev/video0` labelled **CamShare**.
+### Windows
 
-### 3. Start the server
-```bash
-npm start
-```
-
-Open `http://localhost:3000` on **both** devices (or use your machine's LAN IP for the second device).
-
----
-
-## Usage
-
-### Host Device
-1. Go to `http://<server-ip>:3000` → **HOST**
-2. Select your camera from the dropdown
-3. Choose quality and room name
-4. Click **Start Hosting**
-
-### Utiliser Device
-1. Go to `http://<server-ip>:3000` → **UTILISER**
-2. Select the room (or enter the room ID)
-3. Click **Connect** — the live feed appears
-4. Click **Start Virtual Camera** to pipe it to `/dev/video0`
-5. Open any app (OBS, Zoom, etc.) and select **CamShare** as your webcam
-
----
-
-## How it Works
-
-| Layer | Technology |
-|-------|-----------|
-| Signaling | Socket.IO |
-| Video transport | WebRTC (P2P over LAN) |
-| Frame capture | Canvas `getImageData` → RGBA→BGR24 |
-| Virtual driver | `ffmpeg` rawvideo → `v4l2loopback` |
-| Virtual device | `/dev/video0` (label: CamShare) |
-
-The utiliser's browser captures frames from the WebRTC stream via `<canvas>`, converts pixel data from RGBA to raw BGR24, and emits it over a Socket.IO event. The Node.js server pipes the frames to `ffmpeg`, which writes them to the v4l2loopback device.
-
----
-
-## Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PORT` | `3000` | Server port |
-| `VCAM_DEVICE` | `/dev/video0` | Virtual camera device path |
-| `VCAM_WIDTH` | `1280` | Frame width for ffmpeg |
-| `VCAM_HEIGHT` | `720` | Frame height for ffmpeg |
-
-Example:
-```bash
-PORT=8080 VCAM_DEVICE=/dev/video2 VCAM_WIDTH=1920 VCAM_HEIGHT=1080 npm start
+```bat
+install_windows.bat
+.venv\Scripts\activate.bat
+python run.py
 ```
 
 ---
 
-## Platform Notes
+## Connecting Your Phone
 
-### Linux ✅
-Full support. Run `./setup.sh` for one-time setup.
-
-### macOS ⚠️
-WebRTC streaming works. For virtual camera, use **OBS + Virtual Camera**:
-1. Add a Browser Source in OBS pointing to the utiliser page
-2. Start OBS Virtual Camera
-
-### Windows ⚠️
-WebRTC streaming works. For virtual camera, use **OBS Virtual Camera** or **UnityCapture**.
+1. Host PC and phone must be on the **same Wi-Fi network**.
+2. Run `python run.py` — a QR code prints to the terminal.
+3. Open the phone camera and scan the QR code.
+4. Chrome will warn about the self-signed certificate → tap **Advanced → Proceed**.
+5. Tap **Connect & Stream**.
 
 ---
 
-## Multiple Utilisers
+## CLI Options
 
-Multiple devices can connect to the same room simultaneously. Each gets an independent WebRTC connection from the host. Each utiliser can independently start/stop their own virtual camera.
+```
+python run.py --device /dev/video2   # v4l2 device (Linux, default: /dev/video2)
+              --port   8443          # HTTPS port (default: 8443)
+              --regen-cert           # Force new TLS certificate
+```
+
+---
+
+## Performance Targets
+
+| Metric | Target |
+|---|---|
+| Latency | < 150ms (ideal 80ms) |
+| Resolution | Up to 1080p |
+| Frame Rate | Up to 60fps |
+| Bitrate | 5–10 Mbps adaptive |
+| Color Space | yuv420p → BGR |
 
 ---
 
 ## Troubleshooting
 
-**Virtual camera not showing in apps:**
+### "Insecure Connection" warning on phone
+Expected. The certificate is self-signed.
+- **Chrome/Android:** Advanced → Proceed to site
+- **Safari/iOS:** Settings → General → VPN & Device Management → Trust certificate
+
+### Virtual camera not found (Linux)
 ```bash
-# Check the device exists
-ls /dev/video*
+# Load manually
+sudo modprobe v4l2loopback devices=1 video_nr=2 card_label="ShareCam" exclusive_caps=1
 
-# Check v4l2loopback loaded
-lsmod | grep v4l2loopback
-
-# Check ffmpeg is in PATH
-which ffmpeg
+# Verify
+v4l2-ctl --list-devices
 ```
 
-**WebRTC connection fails:**
-- Ensure both devices are on the same LAN
-- Some corporate networks block WebRTC — try disabling VPN
+### No camera permission on phone
+The mobile SPA must be served over **HTTPS** — which ShareCam does by default.
+If loading the URL manually, ensure you're using `https://`, not `http://`.
 
-**Permission denied on /dev/video0:**
-```bash
-sudo usermod -aG video $USER
-# Then log out and back in
+### WebCodecs not available
+Requires Chrome 94+ or Edge 94+. Firefox does not support WebCodecs (as of 2025).
+On iOS, WebCodecs requires Safari 17.4+.
+
+### High latency
+- Switch to 720p if on a 2.4GHz network.
+- Ensure the phone and PC are on the **same access point** (not different SSIDs on a mesh).
+- Check the **Send Buffer** bar in the app — if it's red, reduce resolution/fps.
+
+---
+
+## File Structure
+
 ```
+sharecam/
+├── server/
+│   ├── main.py          # FastAPI HTTPS server + WebSocket endpoint
+│   ├── ssl_gen.py       # Self-signed TLS 1.3 cert generator
+│   ├── mdns_service.py  # mDNS advertisement (sharecam.local)
+│   ├── decoder.py       # H.264 → NumPy BGR via PyAV
+│   └── virtualcam.py    # pyvirtualcam bridge (Linux + Windows)
+├── client/
+│   └── index.html       # Mobile SPA (WebCodecs encoder + WebSocket)
+├── run.py               # Entry point
+├── requirements.txt
+├── install.sh           # Linux one-shot setup
+└── install_windows.bat
+```
+
+---
+
+## License
+MIT

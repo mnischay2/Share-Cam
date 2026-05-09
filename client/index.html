@@ -1,0 +1,922 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>ShareCam</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Martian+Mono:wght@300;400;600;700&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:        #080808;
+    --surface:   #111111;
+    --border:    #222222;
+    --amber:     #f5a623;
+    --amber-dim: #7a5010;
+    --red:       #e8453c;
+    --green:     #2dce66;
+    --text:      #e8e8e8;
+    --muted:     #555;
+    --mono:      'Martian Mono', monospace;
+    --display:   'Syne', sans-serif;
+    --radius:    10px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    overscroll-behavior: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* ── Layout ── */
+  #app {
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;
+    max-width: 480px;
+    margin: 0 auto;
+  }
+
+  /* ── Header ── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 18px 10px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .logo {
+    font-family: var(--display);
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    color: var(--amber);
+  }
+  .logo span { color: var(--text); font-weight: 400; }
+
+  /* ── Status bar ── */
+  #status-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 18px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    font-size: 11px;
+    overflow: hidden;
+  }
+  .status-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--muted);
+    flex-shrink: 0;
+    transition: background 0.3s;
+  }
+  .status-dot.connected   { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .status-dot.connecting  { background: var(--amber); animation: pulse 1s infinite; }
+  .status-dot.error       { background: var(--red); }
+  #status-text { color: var(--text); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #stats-text  { color: var(--muted); white-space: nowrap; }
+
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  /* ── Preview ── */
+  #preview-wrap {
+    position: relative;
+    background: #000;
+    flex-shrink: 0;
+    overflow: hidden;
+  }
+  #preview {
+    width: 100%;
+    display: block;
+    max-height: 220px;
+    object-fit: cover;
+    transform-origin: center;
+  }
+  #preview-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.55);
+    backdrop-filter: blur(2px);
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+    pointer-events: none;
+    transition: opacity 0.3s;
+  }
+  #preview-overlay.hidden { opacity: 0; }
+
+  /* ── Metrics strip ── */
+  #metrics {
+    display: flex;
+    gap: 1px;
+    flex-shrink: 0;
+    background: var(--border);
+  }
+  .metric {
+    flex: 1;
+    background: var(--surface);
+    padding: 8px 10px;
+    text-align: center;
+  }
+  .metric-val {
+    font-family: var(--display);
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--amber);
+    line-height: 1;
+  }
+  .metric-lbl { font-size: 9px; color: var(--muted); margin-top: 3px; text-transform: uppercase; letter-spacing: 1px; }
+
+  /* ── Controls scroll area ── */
+  #controls {
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  /* ── Section ── */
+  .section { display: flex; flex-direction: column; gap: 8px; }
+  .section-label {
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--muted);
+    padding-left: 2px;
+  }
+
+  /* ── Chip group ── */
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip {
+    padding: 7px 14px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+    user-select: none;
+    white-space: nowrap;
+  }
+  .chip:active { transform: scale(0.95); }
+  .chip.active {
+    border-color: var(--amber);
+    background: rgba(245,166,35,0.12);
+    color: var(--amber);
+  }
+  .chip.disabled { opacity: 0.35; pointer-events: none; }
+
+  /* ── Camera list ── */
+  #camera-list { display: flex; flex-direction: column; gap: 6px; }
+  .cam-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .cam-row:active { transform: scale(0.98); }
+  .cam-row.active {
+    border-color: var(--amber);
+    background: rgba(245,166,35,0.08);
+  }
+  .cam-icon {
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    background: var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+  .cam-info { flex: 1; overflow: hidden; }
+  .cam-name { font-size: 13px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cam-id   { font-size: 10px; color: var(--muted); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cam-badge {
+    font-size: 9px;
+    padding: 2px 7px;
+    border-radius: 20px;
+    background: var(--amber-dim);
+    color: var(--amber);
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+
+  /* ── Rotation dial ── */
+  .rot-group { display: flex; gap: 6px; }
+  .rot-btn {
+    flex: 1;
+    padding: 10px 0;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-align: center;
+    user-select: none;
+  }
+  .rot-btn:active { transform: scale(0.95); }
+  .rot-btn.active { border-color: var(--amber); background: rgba(245,166,35,0.12); color: var(--amber); }
+
+  /* ── Host URL input ── */
+  .input-row { display: flex; gap: 8px; }
+  #host-url {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 10px 12px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  #host-url:focus { border-color: var(--amber); }
+  #host-url::placeholder { color: var(--muted); }
+
+  /* ── Congestion bar ── */
+  .buffer-wrap {
+    height: 4px;
+    border-radius: 2px;
+    background: var(--border);
+    overflow: hidden;
+  }
+  #buffer-bar {
+    height: 100%;
+    width: 0%;
+    border-radius: 2px;
+    background: var(--green);
+    transition: width 0.2s, background 0.2s;
+  }
+  #buffer-bar.warn { background: var(--amber); }
+  #buffer-bar.crit { background: var(--red); }
+
+  /* ── Connect button ── */
+  #btn-connect {
+    width: 100%;
+    padding: 16px;
+    border-radius: var(--radius);
+    border: none;
+    background: var(--amber);
+    color: #000;
+    font-family: var(--display);
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    transition: all 0.15s;
+    flex-shrink: 0;
+  }
+  #btn-connect:active { transform: scale(0.97); }
+  #btn-connect:disabled { background: var(--border); color: var(--muted); cursor: not-allowed; }
+  #btn-connect.stop { background: var(--red); color: #fff; }
+
+  /* ── Footer ── */
+  footer {
+    padding: 10px 16px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    flex-shrink: 0;
+    border-top: 1px solid var(--border);
+  }
+
+  /* ── Toast ── */
+  #toast {
+    position: fixed;
+    bottom: 90px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: #1a1a1a;
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 10px 18px;
+    border-radius: 20px;
+    opacity: 0;
+    transition: all 0.25s;
+    pointer-events: none;
+    white-space: nowrap;
+    z-index: 100;
+    max-width: 90vw;
+    text-align: center;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* ── Scrollbar ── */
+  #controls::-webkit-scrollbar { width: 3px; }
+  #controls::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="logo">Share<span>Cam</span></div>
+    <div id="status-bar" style="border:none;padding:0;background:transparent;gap:6px;">
+      <div class="status-dot" id="dot"></div>
+      <span id="status-text" style="font-size:11px;color:var(--muted)">OFFLINE</span>
+    </div>
+  </header>
+
+  <!-- Preview -->
+  <div id="preview-wrap">
+    <video id="preview" autoplay muted playsinline></video>
+    <div id="preview-overlay">No camera — tap Connect</div>
+  </div>
+
+  <!-- Metrics -->
+  <div id="metrics">
+    <div class="metric"><div class="metric-val" id="m-fps">—</div><div class="metric-lbl">FPS</div></div>
+    <div class="metric"><div class="metric-val" id="m-kbps">—</div><div class="metric-lbl">kbps</div></div>
+    <div class="metric"><div class="metric-val" id="m-frames">0</div><div class="metric-lbl">Frames</div></div>
+    <div class="metric"><div class="metric-val" id="m-dropped">0</div><div class="metric-lbl">Dropped</div></div>
+  </div>
+
+  <!-- Controls -->
+  <div id="controls">
+
+    <!-- Host URL -->
+    <div class="section">
+      <div class="section-label">Host URL</div>
+      <div class="input-row">
+        <input type="url" id="host-url" placeholder="https://192.168.x.x:8443" autocomplete="off" autocorrect="off" spellcheck="false">
+      </div>
+    </div>
+
+    <!-- Cameras -->
+    <div class="section">
+      <div class="section-label">Camera</div>
+      <div id="camera-list">
+        <div style="color:var(--muted);font-size:12px;padding:8px 2px">Tap Connect to enumerate cameras…</div>
+      </div>
+    </div>
+
+    <!-- Resolution -->
+    <div class="section">
+      <div class="section-label">Resolution</div>
+      <div class="chips" id="res-chips">
+        <div class="chip" data-w="1280" data-h="720">720p</div>
+        <div class="chip active" data-w="1920" data-h="1080">1080p</div>
+      </div>
+    </div>
+
+    <!-- Frame Rate -->
+    <div class="section">
+      <div class="section-label">Frame Rate</div>
+      <div class="chips" id="fps-chips">
+        <div class="chip" data-fps="24">24fps</div>
+        <div class="chip active" data-fps="30">30fps</div>
+        <div class="chip" data-fps="60">60fps</div>
+      </div>
+    </div>
+
+    <!-- Rotation -->
+    <div class="section">
+      <div class="section-label">Rotation</div>
+      <div class="rot-group" id="rot-group">
+        <div class="rot-btn active" data-rot="0">0°</div>
+        <div class="rot-btn" data-rot="90">90°</div>
+        <div class="rot-btn" data-rot="180">180°</div>
+        <div class="rot-btn" data-rot="270">270°</div>
+      </div>
+    </div>
+
+    <!-- Buffer / Congestion -->
+    <div class="section">
+      <div class="section-label">Send Buffer</div>
+      <div class="buffer-wrap"><div id="buffer-bar"></div></div>
+    </div>
+
+  </div><!-- /controls -->
+
+  <!-- Footer -->
+  <footer>
+    <button id="btn-connect">Connect &amp; Stream</button>
+  </footer>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// ShareCam Mobile Client  v1.0
+// Pipeline: getUserMedia → VideoEncoder (H.264/AVC) → WSS → Host Engine
+// ─────────────────────────────────────────────────────────────────────────────
+'use strict';
+
+// ── State ──────────────────────────────────────────────────────────────────
+const state = {
+  ws: null,
+  encoder: null,
+  stream: null,
+  reader: null,
+  wakeLock: null,
+  deviceId: null,
+  rotation: 0,
+  width: 1920,
+  height: 1080,
+  fps: 30,
+  running: false,
+
+  // Metrics
+  framesSent: 0,
+  framesDropped: 0,
+  bytesOut: 0,
+  lastMetricTime: 0,
+  lastByteSnapshot: 0,
+  encodedThisSec: 0,
+};
+
+// Buffer thresholds (bytes)
+const BUF_WARN  = 1 * 1024 * 1024;  // 1 MB  → yellow
+const BUF_CRIT  = 3 * 1024 * 1024;  // 3 MB  → red
+const BUF_DROP  = 4 * 1024 * 1024;  // 4 MB  → drop frame
+
+// ── DOM refs ──────────────────────────────────────────────────────────────
+const $dot      = document.getElementById('dot');
+const $statusTx = document.getElementById('status-text');
+const $preview  = document.getElementById('preview');
+const $overlay  = document.getElementById('preview-overlay');
+const $camList  = document.getElementById('camera-list');
+const $hostUrl  = document.getElementById('host-url');
+const $btnConn  = document.getElementById('btn-connect');
+const $bufBar   = document.getElementById('buffer-bar');
+const $mFps     = document.getElementById('m-fps');
+const $mKbps    = document.getElementById('m-kbps');
+const $mFrames  = document.getElementById('m-frames');
+const $mDropped = document.getElementById('m-dropped');
+const $toast    = document.getElementById('toast');
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+let _toastTimer = null;
+function toast(msg, ms = 2500) {
+  $toast.textContent = msg;
+  $toast.classList.add('show');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => $toast.classList.remove('show'), ms);
+}
+
+function setStatus(label, mode /* 'idle'|'connecting'|'connected'|'error' */) {
+  $statusTx.textContent = label;
+  $dot.className = 'status-dot';
+  if (mode === 'connected')  $dot.classList.add('connected');
+  if (mode === 'connecting') $dot.classList.add('connecting');
+  if (mode === 'error')      $dot.classList.add('error');
+}
+
+// ── Chip selection ────────────────────────────────────────────────────────
+function activateChip(group, el) {
+  group.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+}
+
+document.getElementById('res-chips').addEventListener('click', e => {
+  const chip = e.target.closest('.chip');
+  if (!chip) return;
+  activateChip(e.currentTarget, chip);
+  state.width  = +chip.dataset.w;
+  state.height = +chip.dataset.h;
+  if (state.running) applyStreamConfig();
+});
+
+document.getElementById('fps-chips').addEventListener('click', e => {
+  const chip = e.target.closest('.chip');
+  if (!chip) return;
+  activateChip(e.currentTarget, chip);
+  state.fps = +chip.dataset.fps;
+  if (state.running) applyStreamConfig();
+});
+
+document.getElementById('rot-group').addEventListener('click', e => {
+  const btn = e.target.closest('.rot-btn');
+  if (!btn) return;
+  document.querySelectorAll('.rot-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  state.rotation = +btn.dataset.rot;
+  sendConfig();
+});
+
+// ── Camera enumeration ────────────────────────────────────────────────────
+async function enumerateCameras() {
+  $camList.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:4px 2px">Enumerating…</div>';
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const cams = devices.filter(d => d.kind === 'videoinput');
+
+    if (cams.length === 0) {
+      $camList.innerHTML = '<div style="color:var(--red);font-size:12px">No cameras found</div>';
+      return;
+    }
+
+    $camList.innerHTML = '';
+    cams.forEach((cam, i) => {
+      const label = cam.label || `Camera ${i + 1}`;
+      const facing = label.toLowerCase().includes('front') || label.toLowerCase().includes('user')
+        ? 'FRONT' : label.toLowerCase().includes('ultra') || label.toLowerCase().includes('wide')
+        ? 'WIDE' : 'BACK';
+      const icon = facing === 'FRONT' ? '🤳' : facing === 'WIDE' ? '🔭' : '📷';
+
+      const row = document.createElement('div');
+      row.className = 'cam-row' + (i === 0 ? ' active' : '');
+      row.innerHTML = `
+        <div class="cam-icon">${icon}</div>
+        <div class="cam-info">
+          <div class="cam-name">${label}</div>
+          <div class="cam-id">${cam.deviceId.slice(0, 20)}…</div>
+        </div>
+        <div class="cam-badge">${facing}</div>
+      `;
+      row.addEventListener('click', () => {
+        document.querySelectorAll('.cam-row').forEach(r => r.classList.remove('active'));
+        row.classList.add('active');
+        state.deviceId = cam.deviceId;
+        if (state.running) switchCamera(cam.deviceId);
+      });
+      if (i === 0) state.deviceId = cam.deviceId;
+      $camList.appendChild(row);
+    });
+  } catch (err) {
+    $camList.innerHTML = `<div style="color:var(--red);font-size:12px">Error: ${err.message}</div>`;
+  }
+}
+
+// ── Wake Lock ─────────────────────────────────────────────────────────────
+async function acquireWakeLock() {
+  if (!('wakeLock' in navigator)) return;
+  try {
+    state.wakeLock = await navigator.wakeLock.request('screen');
+    state.wakeLock.addEventListener('release', async () => {
+      if (state.running) {
+        try { state.wakeLock = await navigator.wakeLock.request('screen'); } catch (_) {}
+      }
+    });
+  } catch (_) {}
+}
+
+function releaseWakeLock() {
+  state.wakeLock?.release();
+  state.wakeLock = null;
+}
+
+// ── WebSocket ─────────────────────────────────────────────────────────────
+function sendConfig() {
+  if (state.ws?.readyState === WebSocket.OPEN) {
+    state.ws.send(JSON.stringify({
+      type: 'config',
+      width: state.width,
+      height: state.height,
+      fps: state.fps,
+      rotation: state.rotation,
+    }));
+  }
+}
+
+async function openWebSocket(url) {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(url.replace(/^https/, 'wss').replace(/^http/, 'ws') + '/stream');
+    ws.binaryType = 'arraybuffer';
+
+    ws.onopen = () => {
+      setStatus('CONNECTED', 'connected');
+      sendConfig();
+      resolve(ws);
+    };
+    ws.onmessage = (e) => {
+      try {
+        const msg = JSON.parse(e.data);
+        if (msg.type === 'request_keyframe' && state.encoder) {
+          state._forceKeyframe = true;
+        }
+      } catch (_) {}
+    };
+    ws.onclose = (ev) => {
+      if (state.running) {
+        setStatus(`DISCONNECTED (${ev.code})`, 'error');
+        toast('Connection lost — retrying in 3s…');
+        setTimeout(() => { if (state.running) reconnect(); }, 3000);
+      }
+    };
+    ws.onerror = () => reject(new Error('WebSocket connection failed'));
+  });
+}
+
+async function reconnect() {
+  const url = $hostUrl.value.trim();
+  if (!url || !state.running) return;
+  try {
+    state.ws = await openWebSocket(url);
+    sendConfig();
+  } catch (err) {
+    setStatus('RETRY FAILED', 'error');
+    toast(err.message);
+  }
+}
+
+// ── VideoEncoder + capture pipeline ──────────────────────────────────────
+function buildEncoder() {
+  const encoder = new VideoEncoder({
+    output: (chunk, meta) => {
+      if (!state.ws || state.ws.readyState !== WebSocket.OPEN) return;
+
+      // Congestion control — drop non-keyframes when buffer is full
+      const buf = state.ws.bufferedAmount;
+      if (buf > BUF_DROP && chunk.type !== 'key') {
+        state.framesDropped++;
+        return;
+      }
+
+      const data = new ArrayBuffer(chunk.byteLength);
+      chunk.copyTo(data);
+      state.ws.send(data);
+      state.bytesOut += data.byteLength;
+      state.framesSent++;
+    },
+    error: (e) => {
+      console.error('[Encoder]', e);
+      toast('Encoder error — restarting');
+      if (state.running) restartEncoder();
+    },
+  });
+
+  // H.264 Baseline for maximum compatibility
+  encoder.configure({
+    codec: 'avc1.42001f',          // Baseline Profile Level 3.1
+    width: state.width,
+    height: state.height,
+    bitrate: bitrateForRes(),
+    framerate: state.fps,
+    latencyMode: 'realtime',
+    avc: { format: 'annexb' },
+  });
+
+  return encoder;
+}
+
+function bitrateForRes() {
+  if (state.width >= 1920) return 10_000_000;
+  if (state.width >= 1280) return  5_000_000;
+  return 2_500_000;
+}
+
+async function startCapture(deviceId) {
+  if (state.stream) {
+    state.stream.getTracks().forEach(t => t.stop());
+  }
+
+  const constraints = {
+    video: {
+      deviceId: deviceId ? { exact: deviceId } : undefined,
+      width:  { ideal: state.width },
+      height: { ideal: state.height },
+      frameRate: { ideal: state.fps },
+    },
+    audio: false,
+  };
+
+  state.stream = await navigator.mediaDevices.getUserMedia(constraints);
+  $preview.srcObject = state.stream;
+  $overlay.classList.add('hidden');
+
+  return state.stream;
+}
+
+async function startEncoding(stream) {
+  if (state.encoder) {
+    await state.encoder.flush().catch(() => {});
+    state.encoder.close();
+  }
+
+  state.encoder = buildEncoder();
+  state._forceKeyframe = true; // First frame is always a keyframe
+
+  const track = stream.getVideoTracks()[0];
+
+  // Use MediaStreamTrackProcessor for zero-copy frame access
+  if (window.MediaStreamTrackProcessor) {
+    const processor = new MediaStreamTrackProcessor({ track });
+    state.reader = processor.readable.getReader();
+
+    (async () => {
+      let frameCount = 0;
+      while (state.running) {
+        let result;
+        try {
+          result = await state.reader.read();
+        } catch (_) { break; }
+        if (result.done) break;
+
+        const frame = result.value;
+        if (state.encoder.encodeQueueSize < 3) {
+          const isKey = state._forceKeyframe || frameCount % (state.fps * 2) === 0;
+          if (isKey) state._forceKeyframe = false;
+          state.encoder.encode(frame, { keyFrame: isKey });
+          frameCount++;
+        } else {
+          state.framesDropped++;
+        }
+        frame.close();
+      }
+    })();
+  } else {
+    // Fallback: ImageCapture-based polling (Safari / older Chrome)
+    toast('MediaStreamTrackProcessor not supported — using fallback');
+    const imageCapture = new ImageCapture(track);
+    let frameCount = 0;
+
+    state._fallbackInterval = setInterval(async () => {
+      if (!state.running) { clearInterval(state._fallbackInterval); return; }
+      try {
+        const bitmap = await imageCapture.grabFrame();
+        const frame = new VideoFrame(bitmap, { timestamp: performance.now() * 1000 });
+        const isKey = state._forceKeyframe || frameCount % (state.fps * 2) === 0;
+        if (isKey) state._forceKeyframe = false;
+        state.encoder.encode(frame, { keyFrame: isKey });
+        frame.close();
+        bitmap.close();
+        frameCount++;
+      } catch (_) {}
+    }, 1000 / state.fps);
+  }
+}
+
+async function switchCamera(deviceId) {
+  const stream = await startCapture(deviceId).catch(e => { toast(e.message); return null; });
+  if (stream) await startEncoding(stream);
+}
+
+async function applyStreamConfig() {
+  sendConfig();
+  await switchCamera(state.deviceId);
+}
+
+function restartEncoder() {
+  if (!state.stream || !state.running) return;
+  startEncoding(state.stream).catch(e => toast(e.message));
+}
+
+// ── Metrics update (every 500ms) ──────────────────────────────────────────
+let _lastFrames = 0;
+setInterval(() => {
+  if (!state.running) return;
+
+  const now = Date.now();
+  const dt = (now - state.lastMetricTime) / 1000 || 1;
+  state.lastMetricTime = now;
+
+  const fps = Math.round((state.framesSent - _lastFrames) / dt);
+  _lastFrames = state.framesSent;
+
+  const kbps = Math.round(((state.bytesOut - state.lastByteSnapshot) * 8) / dt / 1000);
+  state.lastByteSnapshot = state.bytesOut;
+
+  $mFps.textContent     = fps;
+  $mKbps.textContent    = kbps;
+  $mFrames.textContent  = state.framesSent;
+  $mDropped.textContent = state.framesDropped;
+
+  // Buffer bar
+  if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+    const pct = Math.min(100, (state.ws.bufferedAmount / BUF_DROP) * 100);
+    $bufBar.style.width = pct + '%';
+    $bufBar.className = pct > 75 ? 'crit' : pct > 40 ? 'warn' : '';
+  }
+}, 500);
+
+// ── Connect / Disconnect ──────────────────────────────────────────────────
+$btnConn.addEventListener('click', async () => {
+  if (state.running) {
+    await stop();
+  } else {
+    await connect();
+  }
+});
+
+async function connect() {
+  const url = $hostUrl.value.trim();
+  if (!url) { toast('Enter the host URL first'); return; }
+  if (!url.startsWith('https://')) { toast('URL must start with https://'); return; }
+
+  if (!window.VideoEncoder) {
+    toast('⚠️ WebCodecs not supported in this browser');
+    return;
+  }
+
+  $btnConn.disabled = true;
+  setStatus('CONNECTING…', 'connecting');
+
+  try {
+    // 1. Camera permissions + preview
+    const stream = await startCapture(state.deviceId);
+
+    // 2. Enumerate cameras now that we have permission
+    await enumerateCameras();
+
+    // 3. WebSocket
+    state.ws = await openWebSocket(url);
+
+    // 4. Encoder + capture pipeline
+    state.running = true;
+    state.lastMetricTime = Date.now();
+    await startEncoding(stream);
+
+    // 5. Wake lock
+    await acquireWakeLock();
+
+    $btnConn.textContent = 'Stop Streaming';
+    $btnConn.classList.add('stop');
+    $btnConn.disabled = false;
+
+  } catch (err) {
+    setStatus('ERROR', 'error');
+    toast(err.message);
+    $btnConn.disabled = false;
+    await stop(true);
+  }
+}
+
+async function stop(silent = false) {
+  state.running = false;
+
+  // Stop reader
+  state.reader?.cancel?.();
+  state.reader = null;
+  clearInterval(state._fallbackInterval);
+
+  // Flush + close encoder
+  if (state.encoder) {
+    try { await state.encoder.flush(); } catch (_) {}
+    state.encoder.close();
+    state.encoder = null;
+  }
+
+  // Close WS
+  state.ws?.close();
+  state.ws = null;
+
+  // Stop tracks
+  state.stream?.getTracks().forEach(t => t.stop());
+  state.stream = null;
+  $preview.srcObject = null;
+  $overlay.classList.remove('hidden');
+
+  // Wake lock
+  releaseWakeLock();
+
+  // Reset metrics
+  state.framesSent = state.framesDropped = state.bytesOut = 0;
+  state.lastByteSnapshot = 0;
+  _lastFrames = 0;
+  $mFps.textContent = $mKbps.textContent = '—';
+  $mFrames.textContent = $mDropped.textContent = '0';
+  $bufBar.style.width = '0%';
+
+  if (!silent) setStatus('OFFLINE', 'idle');
+  $btnConn.textContent = 'Connect & Stream';
+  $btnConn.classList.remove('stop');
+  $btnConn.disabled = false;
+}
+
+// ── Auto-fill URL from page origin (when served by ShareCam host) ─────────
+(function prefillUrl() {
+  if (location.protocol === 'https:' && location.hostname !== 'localhost') {
+    $hostUrl.value = location.origin;
+  }
+})();
+
+// ── Handle visibility change (re-acquire wake lock) ───────────────────────
+document.addEventListener('visibilitychange', async () => {
+  if (document.visibilityState === 'visible' && state.running && !state.wakeLock) {
+    await acquireWakeLock();
+  }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,24 @@
+# ShareCam — Python Host Engine Dependencies
+# Install with: pip install -r requirements.txt --break-system-packages
+# (or inside a virtualenv: python -m venv .venv && source .venv/bin/activate)
+
+# ── Web framework & server ────────────────────────────────────────────────
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+
+# ── TLS / certificate generation ─────────────────────────────────────────
+cryptography>=42.0.0
+
+# ── H.264 decode + frame manipulation ────────────────────────────────────
+av>=12.0.0          # PyAV (FFmpeg Python bindings)
+numpy>=1.26.0
+opencv-python-headless>=4.9.0
+
+# ── Virtual camera output ─────────────────────────────────────────────────
+pyvirtualcam>=0.11.0
+
+# ── mDNS advertisement ────────────────────────────────────────────────────
+zeroconf>=0.132.0
+
+# ── QR code terminal display ──────────────────────────────────────────────
+qrcode>=7.4.2
