@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
 run.py — ShareCam entry point.
-Usage: python run.py [--device /dev/video2] [--port 8443] [--regen-cert]
+Usage: python run.py [--device /dev/video42] [--port 8443] [--regen-cert]
 """
 import argparse
-import os
+import os   
 import sys
 from pathlib import Path
 
@@ -47,7 +47,7 @@ def check_device_health(device: str) -> None:
 
 def main():
     parser = argparse.ArgumentParser(description="ShareCam Host Engine")
-    parser.add_argument("--device", default="/dev/video2", help="v4l2loopback device path. Ignored when --obs is set.")
+    parser.add_argument("--device", default="/dev/video42", help="v4l2loopback device path. Ignored when --obs is set.")
     parser.add_argument("--obs", action="store_true", help="Use OBS VirtualCam (auto-discover device)")
     parser.add_argument("--port", type=int, default=8443, help="HTTPS/WSS port (default: 8443)")
     parser.add_argument("--regen-cert", action="store_true", help="Force regenerate SSL certificate")

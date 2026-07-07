@@ -1,7 +1,7 @@
 """
 mdns_service.py — Advertises ShareCam over mDNS (_sharecam._tcp.local.)
 so the mobile client can find the host without manual IP entry.
-"""
+""" 
 import logging
 import socket
 
